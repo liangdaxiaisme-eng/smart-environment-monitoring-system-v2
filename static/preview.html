@@ -218,7 +218,7 @@ align-items:center;justify-content:space-between;background:var(--surface)}
               <div style="font-weight:600;color:var(--text);margin-bottom:4px">模型信息</div>
               架构：ResNet18 backbone + Squeeze-Excitation 注意力<br>
               输入：224×224 RGB 图像（ImageNet 归一化）<br>
-              输出：4类 softmax 概率分布<br>
+              输出：4类 softmax 概率分布 + Grad-CAM 热力图<br>
               权重：resnet_se_best.pth (42.8 MB)
             </div>
             <div style="font-size:12px;color:var(--text2);line-height:1.7">
@@ -247,6 +247,25 @@ align-items:center;justify-content:space-between;background:var(--surface)}
               <div class="stat" style="padding:12px"><div class="stat-label">置信度</div><div class="stat-value" style="font-size:20px">78.3%</div></div>
               <div class="stat" style="padding:12px"><div class="stat-label">模型</div><div class="stat-value" style="font-size:14px">ResNet18+SE</div><div class="stat-sub">准确率 90.8%</div></div>
             </div>
+            <div style="font-weight:600;font-size:12px;margin-bottom:8px;color:var(--text2)">🔍 Grad-CAM 可视化（模型关注区域）</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+              <div>
+                <div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:6px">原图</div>
+                <div style="background:var(--surface2);aspect-ratio:1;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border)">
+                  <span style="font-size:12px;color:var(--text2)">原图预览</span>
+                </div>
+              </div>
+              <div>
+                <div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:6px">Grad-CAM 热力图（轻度污染）</div>
+                <div style="background:linear-gradient(135deg,#000080 0%,#0000ff 20%,#00ffff 40%,#00ff00 60%,#ffff00 80%,#ff0000 100%);aspect-ratio:1;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);opacity:.7">
+                  <span style="font-size:12px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8)">JET 热力图示意</span>
+                </div>
+              </div>
+            </div>
+            <div style="background:var(--surface2);padding:10px 14px;border-radius:8px;font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:16px">
+              💡 热力图红色区域表示模型判断为 <b style="color:var(--text)">轻度污染</b> 的关键依据。颜色越红 = 权重越高，蓝色 = 对分类贡献小。
+            </div>
+
             <div style="font-weight:600;font-size:12px;margin-bottom:8px;color:var(--text2)">各类别概率分布</div>
             <div class="bar-row"><span class="bar-label">清洁</span><div class="bar-track"><div class="bar-fill" style="width:8.2%;background:#00e400"></div><span class="bar-val">8.2%</span></div></div>
             <div class="bar-row"><span class="bar-label">轻度污染</span><div class="bar-track"><div class="bar-fill" style="width:78.3%;background:#fbbf24"></div><span class="bar-val">78.3%</span></div></div>

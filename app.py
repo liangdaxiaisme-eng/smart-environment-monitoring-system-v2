@@ -11,7 +11,7 @@ import os
 import time
 import json
 from PIL import Image
-from models.water import load_water_model
+from models.water import load_water_model, GradCAM
 from models.air import load_air_model
 from models.fusion import load_fusion_model
 from models.detector import load_yolo_model
@@ -39,6 +39,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # ── 模型加载 ─────────────────────────────────────────────────────
 t0 = time.time()
 water_model = load_water_model(os.path.join(WEIGHTS_DIR, 'resnet_se_best.pth'), device)
+water_gradcam = GradCAM(water_model) if water_model is not None else None
 air_model   = load_air_model(os.path.join(WEIGHTS_DIR, 'lstm_best.pth'), device)
 fusion_model = load_fusion_model(os.path.join(WEIGHTS_DIR, 'fusion_best.pth'), device)
 yolo_model  = load_yolo_model(os.path.join(WEIGHTS_DIR, 'rubbish_best.pt'))
@@ -605,11 +606,45 @@ def do_water():
         f.save(filepath)
         img = Image.open(filepath).convert('RGB')
         img_tensor = water_transform(img).unsqueeze(0).to(device)
+
+        # 推理
         with torch.no_grad():
             output = water_model(img_tensor)
             probs = torch.softmax(output, dim=1).cpu().numpy()[0]
         pred_class = probs.argmax()
         confidence = probs.max() * 100
+
+        # Grad-CAM 热力图
+        heatmap_html = ''
+        if water_gradcam is not None:
+            try:
+                heatmap = water_gradcam.generate(img_tensor, target_class=pred_class)
+                overlay = GradCAM.overlay_heatmap(img, heatmap, alpha=0.45)
+                overlay_path = os.path.join(UPLOAD_DIR, 'water_gradcam.jpg')
+                overlay.save(overlay_path, quality=92)
+                # 原图也保存一份（统一尺寸）
+                original_resized = img.resize((224, 224), Image.LANCZOS)
+                original_path = os.path.join(UPLOAD_DIR, 'water_original.jpg')
+                original_resized.save(original_path, quality=92)
+
+                heatmap_html = f'''
+                <div style="font-weight:600;font-size:12px;margin-bottom:8px;color:var(--text2)">🔍 Grad-CAM 可视化（模型关注区域）</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+                  <div>
+                    <div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:6px">原图</div>
+                    <img src="/uploads/water_original.jpg" style="width:100%;border-radius:8px;border:1px solid var(--border)">
+                  </div>
+                  <div>
+                    <div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:6px">Grad-CAM 热力图（{CLASS_NAMES[pred_class]}）</div>
+                    <img src="/uploads/water_gradcam.jpg" style="width:100%;border-radius:8px;border:1px solid var(--border)">
+                  </div>
+                </div>
+                <div style="background:var(--surface2);padding:10px 14px;border-radius:8px;font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:16px">
+                  💡 热力图红色区域表示模型判断为 <b style="color:var(--text)">{CLASS_NAMES[pred_class]}</b> 的关键依据。颜色越红 = 权重越高，蓝色 = 对分类贡献小。
+                </div>
+                '''
+            except Exception as e:
+                heatmap_html = f'<div style="font-size:11px;color:var(--text2);margin-bottom:12px">Grad-CAM 生成失败: {e}</div>'
 
         colors = ['#00e400', '#fbbf24', '#f97316', '#ef4444']
         bars = ''
@@ -627,6 +662,7 @@ def do_water():
           <div class="stat" style="padding:12px"><div class="stat-label">置信度</div><div class="stat-value" style="font-size:20px">{confidence:.1f}%</div></div>
           <div class="stat" style="padding:12px"><div class="stat-label">模型</div><div class="stat-value" style="font-size:14px">ResNet18+SE</div><div class="stat-sub">准确率 90.8%</div></div>
         </div>
+        {heatmap_html}
         <div style="font-weight:600;font-size:12px;margin-bottom:8px;color:var(--text2)">各类别概率分布</div>
         {bars}
         ''', None

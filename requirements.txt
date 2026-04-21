@@ -4,3 +4,4 @@ flask>=3.0
 numpy
 Pillow
 ultralytics
+matplotlib
