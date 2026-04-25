@@ -276,6 +276,10 @@ document.addEventListener('DOMContentLoaded', function() {
       <span class="nav-icon">🔗</span>综合评估
       <span class="nav-badge">Fusion</span>
     </a>
+    <a class="nav-item {{'active' if page=='realtime' else ''}}" href="/realtime">
+      <span class="nav-icon">📷</span>实时摄像头
+      <span class="nav-badge">Live</span>
+    </a>
   </nav>
   <div class="sidebar-footer">
     <div>推理设备</div>
@@ -846,8 +850,193 @@ def do_fusion():
     except Exception as e:
         return None, str(e)
 
+# ========== 实时摄像头检测 ==========
+@app.route('/realtime', methods=['GET', 'POST'])
+def realtime():
+    """实时摄像头检测页面"""
+    content = '''
+    <div class="page-header">
+      <h1>📷 实时摄像头检测</h1>
+      <p style="color:var(--text2);margin-top:8px">使用您的摄像头进行实时目标检测</p>
+    </div>
+    
+    <div class="control-bar" style="margin-bottom:20px">
+      <button id="startBtn" class="btn btn-primary" onclick="startCamera()">🎥 开启摄像头</button>
+      <button id="stopBtn" class="btn" onclick="stopCamera()" disabled>⏹ 停止</button>
+      <select id="modelSelect" class="select" style="margin-left:12px">
+        <option value="trash">垃圾分类检测</option>
+      </select>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div>
+        <div class="panel-title">摄像头画面</div>
+        <div class="upload-zone" id="cameraZone" style="min-height:360px;display:flex;align-items:center;justify-content:center;flex-direction:column">
+          <video id="video" autoplay playsinline style="width:100%;max-height:360px;border-radius:8px;display:none"></video>
+          <canvas id="canvas" style="width:100%;max-height:360px;border-radius:8px;display:none"></canvas>
+          <div id="placeholder">
+            <div class="icon">📷</div>
+            <div class="label">点击"开启摄像头"开始检测</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="panel-title">检测结果</div>
+        <div id="resultPanel" class="panel" style="min-height:360px">
+          <div style="color:var(--text2);text-align:center;padding:120px 0">等待检测...</div>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+    let stream = null;
+    let detectInterval = null;
+    let isDetecting = false;
+    
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } } 
+        });
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        video.srcObject = stream;
+        video.style.display = 'block';
+        document.getElementById('placeholder').style.display = 'none';
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+        
+        // 开始定时检测
+        startDetection();
+      } catch (err) {
+        alert('无法访问摄像头: ' + err.message + '\n请确保已授予摄像头权限');
+      }
+    }
+    
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      if (detectInterval) {
+        clearInterval(detectInterval);
+        detectInterval = null;
+      }
+      
+      document.getElementById('video').style.display = 'none';
+      document.getElementById('canvas').style.display = 'none';
+      document.getElementById('placeholder').style.display = 'flex';
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = true;
+    }
+    
+    async function startDetection() {
+      const video = document.getElementById('video');
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      isDetecting = true;
+      
+      detectInterval = setInterval(async () => {
+        if (!isDetecting || video.readyState !== 4) return;
+        
+        // 设置画布尺寸
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // 绘制视频帧
+        ctx.drawImage(video, 0, 0);
+        
+        // 转换为 base64
+        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        
+        // 发送到后端检测
+        try {
+          const formData = new FormData();
+          formData.append('file', dataURLtoBlob(imageData), 'frame.jpg');
+          
+          const response = await fetch('/detect/realtime', {
+            method: 'POST',
+            body: formData
+          });
+          
+          const html = await response.text();
+          document.getElementById('resultPanel').innerHTML = html;
+        } catch (e) {
+          console.error('检测失败:', e);
+        }
+      }, 1000); // 每秒检测一次
+    }
+    
+    function dataURLtoBlob(dataurl) {
+      const arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1];
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) u8arr[n] = bstr.charCodeAt(n);
+      return new Blob([u8arr], { type: mime });
+    }
+    </script>
+    '''
+    return render('realtime', '实时摄像头检测', content)
 
-if __name__ == '__main__':
+@app.route('/detect/realtime', methods=['POST'])
+def detect_realtime():
+    """实时检测API"""
+    f = request.files.get('file')
+    if not f or f.filename == '':
+        return '请上传图片'
+    if yolo_model is None:
+        return '<div style="color:red">YOLO 模型未加载</div>'
+    
+    try:
+        filepath = os.path.join(UPLOAD_DIR, 'realtime_input.jpg')
+        f.save(filepath)
+        
+        results = yolo_model(filepath, verbose=False)
+        
+        if len(results) == 0 or len(results[0].boxes) == 0:
+            return '<div style="text-align:center;padding:40px;color:var(--text2)">未检测到目标</div>'
+        
+        boxes = results[0].boxes
+        detections = []
+        for i in range(len(boxes)):
+            cls_id = int(boxes.cls[i].item())
+            conf = boxes.conf[i].item()
+            cls_name = TRASH_CLASSES[cls_id] if cls_id < len(TRASH_CLASSES) else f'class_{cls_id}'
+            detections.append((cls_name, conf))
+        
+        detections.sort(key=lambda x: x[1], reverse=True)
+        
+        # 保存标注图
+        annotated = results[0].plot()
+        from PIL import Image as PILImage
+        annotated_rgb = PILImage.fromarray(annotated[:, :, ::-1])
+        annotated_path = os.path.join(UPLOAD_DIR, 'realtime_annotated.jpg')
+        annotated_rgb.save(annotated_path, quality=85)
+        
+        rows = ''
+        for cls, conf in detections[:6]:  # 最多显示6个
+            color = 'var(--green)' if conf > 0.8 else 'var(--yellow)' if conf > 0.6 else 'var(--text2)'
+            cn = TRASH_CN.get(cls, cls)
+            rows += f'<div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--surface2);border-radius:6px;margin-bottom:6px"><span>{cn}</span><span style="color:{color};font-weight:600">{conf*100:.1f}%</span></div>'
+        
+        return f'''
+        <div style="margin-bottom:12px">
+          <img src="/uploads/realtime_annotated.jpg" style="width:100%;border-radius:8px;border:1px solid var(--border)">
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+          <div style="text-align:center"><div style="font-size:20px;font-weight:700">{len(detections)}</div><div style="font-size:11px;color:var(--text2)">检测目标</div></div>
+          <div style="text-align:center"><div style="font-size:20px;font-weight:700;color:var(--green)">{detections[0][1]*100:.0f}%</div><div style="font-size:11px;color:var(--text2)">最高置信度</div></div>
+          <div style="text-align:center"><div style="font-size:20px;font-weight:700">YOLO11n</div><div style="font-size:11px;color:var(--text2)">模型</div></div>
+        </div>
+        {rows}
+        '''
+    except Exception as e:
+        return f'<div style="color:red">检测失败: {str(e)}</div>'
+
+
+if __name__ == "__main__":
     print(f"[*] 环境监测系统 v2 启动 → http://0.0.0.0:5000")
     print(f"[*] 设备: {device} | 模型: {loaded_count}/4 就绪 | 耗时: {load_time:.1f}s")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False)
