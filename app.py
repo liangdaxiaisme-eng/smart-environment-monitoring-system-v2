@@ -159,14 +159,16 @@ font-size:13px;font-weight:600;cursor:pointer;transition:background .15s;width:1
 .btn:disabled{opacity:.4;cursor:not-allowed}
 
 /* Upload */
-.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:40px;
-text-align:center;cursor:pointer;transition:all .2s}
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:30px;
+text-align:center;cursor:pointer;transition:all .2s;min-height:180px;position:relative;overflow:hidden}
 .upload-zone:hover{border-color:var(--accent);background:rgba(79,140,255,0.05)}
 .upload-zone input{display:none}
 .upload-zone .icon{font-size:32px;margin-bottom:8px}
 .upload-zone .label{font-size:13px;color:var(--text2)}
 .upload-zone .hint{font-size:11px;color:var(--text2);margin-top:4px;opacity:.6}
 .file-selected{font-size:12px;color:var(--green);margin-top:8px}
+.upload-preview{margin-top:12px;text-align:center}
+.upload-preview img{max-width:100%;max-height:200px;border-radius:8px;border:2px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,0.2)}
 
 /* Result */
 .result-box{margin-top:20px;border-radius:var(--radius);padding:20px;border:1px solid var(--border)}
@@ -208,7 +210,45 @@ border-top:1px solid var(--border);margin-top:40px}
 /* Animated entry */
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 .animate{animation:fadeUp .35s ease-out}
+
+/* Upload preview */
+.show-preview{display:block}
+.hide-preview{display:none}
 </style>
+<script>
+// 图片上传预览
+function setupFilePreview(inputId, previewId, fileNameId) {
+  const input = document.getElementById(inputId);
+  const preview = document.getElementById(previewId);
+  const fileName = document.getElementById(fileNameId);
+  
+  input.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+      // 显示文件名
+      if (fileName) {
+        fileName.textContent = '✅ ' + file.name;
+        fileName.style.color = 'var(--green)';
+      }
+      
+      // 显示图片预览
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        preview.src = e.target.result;
+        preview.classList.remove('hide-preview');
+        preview.classList.add('show-preview');
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
+// 初始化所有上传框
+document.addEventListener('DOMContentLoaded', function() {
+  setupFilePreview('wfile', 'wpreview', 'wfile-name');
+  setupFilePreview('tfile', 'tpreview', 'tfile-name');
+});
+</script>
 </head>
 <body>
 <aside class="sidebar">
@@ -397,6 +437,7 @@ def water_content(result=None, error=None):
             <div class="label">点击上传水质图片</div>
             <div class="hint">支持 JPG / PNG 格式</div>
           </label>
+          <div id="wpreview" class="upload-preview hide-preview"><img src="" alt="预览"></div>
           <div id="wfile-name" class="file-selected"></div>
           <button type="submit" class="btn" ''' + ('disabled' if not model_status['water'] else '') + '''>''' + ('🔍 开始分析' if model_status['water'] else '⚠ 模型未加载') + '''</button>
         </form>
@@ -495,6 +536,7 @@ def trash_content(result=None, error=None):
             <div class="label">点击上传河面图片</div>
             <div class="hint">支持 JPG / PNG 格式</div>
           </label>
+          <div id="tpreview" class="upload-preview hide-preview"><img src="" alt="预览"></div>
           <div id="tfile-name" class="file-selected"></div>
           <button type="submit" class="btn" ''' + ('disabled' if not model_status['trash'] else '') + '''>''' + ('🔍 开始检测' if model_status['trash'] else '⚠ 模型未加载') + '''</button>
         </form>
